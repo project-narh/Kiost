@@ -1,18 +1,21 @@
-﻿namespace Server.Services
+﻿using Server.Services.IService;
+using System.Threading.Tasks;
+
+namespace Server.Services
 {
     public class KioskService : IKioskService
     {
         private string _status = "on";
 
-        public string GetStatus()
+        public async Task<string> GetStatusAsync()
         {
-            return _status;
+            return await Task.FromResult(_status);
         }
 
-        public void SetStatus(string status)
+        public async Task SetStatusAsync(string status)
         {
             _status = status;
+            await Task.CompletedTask;
         }
     }
-
 }

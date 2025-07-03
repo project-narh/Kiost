@@ -1,8 +1,10 @@
-﻿namespace Server.Services
+﻿using System.Threading.Tasks;
+
+namespace Server.Services.IService
 {
     public interface IKioskService
     {
-        string GetStatus();
-        void SetStatus(string status);
+        Task<string> GetStatusAsync();
+        Task SetStatusAsync(string status);
     }
 }

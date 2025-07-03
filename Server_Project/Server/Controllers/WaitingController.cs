@@ -1,9 +1,12 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Server.Services.IService;
+using Server.Models;
+using System.Threading.Tasks;
 
 namespace Server.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
+    [Route("api/waiting")]
     public class WaitingController : ControllerBase
     {
         private readonly IWaitingService _waitingService;
@@ -14,18 +17,25 @@ namespace Server.Controllers
         }
 
         [HttpGet("waittime")]
-        public IActionResult GetWaitTime([FromQuery] int people)
+        public async Task<IActionResult> GetWaitTime([FromQuery] int people)
         {
-            var time = _waitingService.GetWaitTime(people);
-            return Ok(new ApiResponse<int> { Success = true, Data = time });
+            var time = await _waitingService.GetWaitTimeAsync(people);
+            return Ok(new ApiResponse<object>
+            {
+                Success = true,
+                Data = new { waitTime = time, people }
+            });
         }
 
         [HttpGet("list")]
-        public IActionResult GetWaitingList()
+        public async Task<IActionResult> GetWaitingList()
         {
-            var list = _waitingService.GetWaitingList();
-            return Ok(new ApiResponse<List<WaitingEntry>> { Success = true, Data = list });
+            var list = await _waitingService.GetWaitingListAsync();
+            return Ok(new ApiResponse<object>
+            {
+                Success = true,
+                Data = new { waitingList = list, count = list.Count }
+            });
         }
     }
-
 }

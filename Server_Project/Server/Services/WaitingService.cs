@@ -1,35 +1,85 @@
 ﻿using Server.Services.IService;
+using Server.Models;
+using Server.Database;
+using Microsoft.EntityFrameworkCore;
 using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace Server.Services
 {
     public class WaitingService : IWaitingService
     {
-        private readonly AppDbContext _context;
+        private readonly ServerdbContext _context;
 
-        public WaitingService(AppDbContext context)
+        public WaitingService(ServerdbContext context)
         {
             _context = context;
         }
 
-        public int GetWaitTime(int people)
+        public async Task<int> GetWaitTimeAsync(int people)
         {
-            // 간단 예시: 현재 occupied 테이블 평균 잔여시간 + 대기열 * 평균회전
-            int avgDiningTime = 30; // 기본값
-            return avgDiningTime * _context.Reservations.Count(r => r.Status == "active");
+            var occupiedTables = await _context.Tables
+                .CountAsync(t => t.Status == "occupied");
+
+            var activeReservations = await _context.Reservations
+                .CountAsync(r => r.Status == "active");
+
+            var availableTables = await _context.Tables
+                .CountAsync(t => t.Status == "available" && t.Seats >= people);
+
+            if (availableTables > 0)
+            {
+                return 0;
+            }
+
+            var avgDiningTime = await GetAverageDiningTimeAsync();
+            int estimatedWaitTime = activeReservations * 15;
+
+            return Math.Max(15, estimatedWaitTime);
         }
 
-        public List<WaitingEntry> GetWaitingList()
+        public async Task<List<WaitingEntry>> GetWaitingListAsync()
         {
-            return _context.Reservations
+            var reservations = await _context.Reservations
                 .Where(r => r.Status == "active")
-                .Select(r => new WaitingEntry
+                .OrderBy(r => r.Time)
+                .ToListAsync();
+
+            var result = new List<WaitingEntry>();
+            int estimatedWaitTime = 0;
+
+            foreach (var reservation in reservations)
+            {
+                result.Add(new WaitingEntry
                 {
-                    Name = r.Name,
-                    People = r.People,
-                    ReservationTime = r.ReservationTime
-                }).ToList();
+                    ReservationId = reservation.ReservationId,
+                    People = reservation.People,
+                    ReservationTime = reservation.Time,
+                    Status = reservation.Status,
+                    EstimatedWaitTime = estimatedWaitTime
+                });
+
+                estimatedWaitTime += 15;
+            }
+
+            return result;
+        }
+
+        private async Task<int> GetAverageDiningTimeAsync()
+        {
+            var completedVisits = await _context.VisitLogs
+                .Where(v => v.ExitTime != null && v.TotalTime > 0)
+                .Take(100)
+                .ToListAsync();
+
+            if (completedVisits.Any())
+            {
+                return (int)completedVisits.Average(v => v.TotalTime);
+            }
+
+            return 45;
         }
     }
-
 }

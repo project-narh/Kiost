@@ -1,35 +1,12 @@
 ﻿using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using MySqlConnector;
-using Mysqlx.Crud;
 using System;
-using System.Collections.Generic;
 using System.Data;
-using System.Data.Common;
-using System.Linq;
-using System.Text;
+using System.IO;
 using System.Text.Json;
-using System.Threading.Tasks;
 
 namespace Server.Database
 {
-    public class SqlLoggerInterceptor : SaveChangesInterceptor
-    {
-        public override InterceptionResult<int> SavingChanges(
-            DbContextEventData eventData, InterceptionResult<int> result)
-        {
-            var context = eventData.Context;
-            if (context != null)
-            {
-                var changes = context.ChangeTracker.DebugView.LongView; // 변경된 SQL 미리보기
-                Console.WriteLine($"변경된 SQL:\n{changes}");
-            }
-            return base.SavingChanges(eventData, result);
-        }
-    }
-
     public class ServerdbContext : DbContext
     {
         private readonly string _connectionString;
@@ -37,67 +14,64 @@ namespace Server.Database
         public DbSet<Menu> Menus { get; set; }
         public DbSet<Table> Tables { get; set; }
         public DbSet<Reservation> Reservations { get; set; }
-        public DbSet<orderdata> Orders { get; set; }
+        public DbSet<OrderData> Orders { get; set; }
         public DbSet<OrderItem> OrderItems { get; set; }
         public DbSet<VisitLog> VisitLogs { get; set; }
-        //public DbSet<PublicSet> PublicSets { get; set; }
-
 
         public ServerdbContext()
         {
-            _connectionString = GetAccountTable();
+            _connectionString = GetConnectionString();
+        }
+
+        public ServerdbContext(DbContextOptions<ServerdbContext> options) : base(options)
+        {
+            _connectionString = GetConnectionString();
         }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
-            if (string.IsNullOrEmpty(_connectionString)) GetAccountTable();
-
-            optionsBuilder.UseMySql(_connectionString,
-                new MySqlServerVersion(new Version(10, 11, 11)));
-            //optionsBuilder
-            //    .AddInterceptors(new SqlLoggerInterceptor()) // 인터셉터 등록
-            //    .LogTo(Console.WriteLine, LogLevel.Information) // EF Core 기본 SQL 로그 활성화
-            //    .EnableSensitiveDataLogging(); // WHERE 조건에 포함된 데이터도 로그에 출력
+            if (!optionsBuilder.IsConfigured)
+            {
+                optionsBuilder.UseMySql(_connectionString,
+                    new MySqlServerVersion(new Version(10, 11, 11)));
+            }
         }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
-            // 필요시 Fluent API 구성 추가
+
+            // 테이블 상태 ENUM 설정
+            modelBuilder.Entity<Table>()
+                .Property(t => t.Status)
+                .HasConversion<string>();
+
+            // 예약 상태 ENUM 설정  
+            modelBuilder.Entity<Reservation>()
+                .Property(r => r.Status)
+                .HasConversion<string>();
         }
-        //protected override void OnModelCreating(ModelBuilder modelBuilder)
-        //{
-        //    modelBuilder.Entity<UserItem>()
-        //        .HasKey(u => u.Id); // 🎯 `id`만 PK로 설정
 
-        //    modelBuilder.Entity<UserItem>()
-        //        .HasIndex(u => new { u.UniqueId, u.Uid }) // 🎯 특정 필드를 WHERE에 사용하도록 설정
-        //        .HasDatabaseName("IX_UserItem_UniqueId_Uid");
-        //}
-
-        //protected override void OnModelCreating(ModelBuilder modelBuilder)
-        //{
-        //    modelBuilder.Entity<UserItem>()
-        //        .HasKey(u => new { u.Id, u.UniqueId }); // 복합 PK 설정
-        //    modelBuilder.Entity<PublicItem>()
-        //        .HasKey(p => p.TokenId);
-        //    base.OnModelCreating(modelBuilder);
-        //}
-
-
-
-        private string GetAccountTable()
+        private string GetConnectionString()
         {
-            string path = Directory.GetCurrentDirectory() + "\\Database\\Connect_Account.json";
+            // 환경변수에서 먼저 확인
+            var envConnectionString = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING");
+            if (!string.IsNullOrEmpty(envConnectionString))
+            {
+                return envConnectionString;
+            }
+
+            // JSON 파일에서 연결 문자열 가져오기
+            string path = Path.Combine(Directory.GetCurrentDirectory(), "Database", "Connect_Account.json");
 
             if (!File.Exists(path))
             {
-                throw new FileNotFoundException($"DB 보안 파일을 찾을 수 없습니다.  DB 파일 위치 : {path}");
+                throw new FileNotFoundException($"DB 연결 설정 파일을 찾을 수 없습니다: {path}");
             }
 
             string json = File.ReadAllText(path);
-            Connect_Account account = JsonSerializer.Deserialize<Connect_Account>(json);
-
-            return account.DB;
+            var account = JsonSerializer.Deserialize<ConnectAccount>(json);
+            return account?.DB ?? throw new InvalidOperationException("DB 연결 문자열이 null입니다.");
         }
 
         public IDbConnection CreateConnection()
@@ -106,7 +80,5 @@ namespace Server.Database
             connection.Open();
             return connection;
         }
-
     }
-    class Connect_Account { public string DB { get; set; } }
 }

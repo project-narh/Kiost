@@ -1,5 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Server.Services.IService;
+using Server.Models;
+using System.Threading.Tasks;
 
 namespace Server.Controllers
 {
@@ -15,22 +17,25 @@ namespace Server.Controllers
         }
 
         [HttpGet("status")]
-        public IActionResult GetStatus()
+        public async Task<IActionResult> GetStatus()
         {
-            var status = _kioskService.GetStatus();
-            return Ok(new { success = true, status });
+            var status = await _kioskService.GetStatusAsync();
+            return Ok(new ApiResponse<object>
+            {
+                Success = true,
+                Data = new { status }
+            });
         }
 
         [HttpPost("status")]
-        public IActionResult SetStatus([FromBody] KioskStatusRequest request)
+        public async Task<IActionResult> SetStatus([FromBody] KioskStatusRequest request)
         {
-            _kioskService.SetStatus(request.Status);
-            return Ok(new { success = true, message = "상태 변경됨" });
+            await _kioskService.SetStatusAsync(request.Status);
+            return Ok(new ApiResponse<object>
+            {
+                Success = true,
+                Message = "상태가 변경되었습니다."
+            });
         }
-    }
-
-    public class KioskStatusRequest
-    {
-        public string Status { get; set; } = "on";
     }
 }

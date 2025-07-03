@@ -1,45 +1,77 @@
 ﻿using Server.Services.IService;
+using Server.Models;
+using Server.Database;
+using Microsoft.EntityFrameworkCore;
 using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace Server.Services
 {
     public class ReservationService : IReservationService
     {
-        private readonly AppDbContext _context;
+        private readonly ServerdbContext _context;
 
-        public ReservationService(AppDbContext context)
+        public ReservationService(ServerdbContext context)
         {
             _context = context;
         }
 
-        public Reservation CreateReservation(ReservationRequest request)
+        public async Task<ReservationInfo> CreateReservationAsync(ReservationRequest request)
         {
             var reservation = new Reservation
             {
                 Name = request.Name,
                 Phone = request.Phone,
                 People = request.People,
-                ReservationTime = request.ReservationTime,
-                Status = "active"
+                Time = request.ReservationTime,
+                Status = "active",
+                CreatedAt = DateTime.UtcNow
             };
+
             _context.Reservations.Add(reservation);
-            _context.SaveChanges();
-            return reservation;
-        }
+            await _context.SaveChangesAsync();
 
-        public List<Reservation> GetReservations()
-        {
-            return _context.Reservations.Where(r => r.Status == "active").ToList();
-        }
-
-        public void CancelReservation(int id)
-        {
-            var res = _context.Reservations.Find(id);
-            if (res != null)
+            return new ReservationInfo
             {
-                res.Status = "canceled";
-                _context.SaveChanges();
-            }
+                ReservationId = reservation.ReservationId,
+                Name = reservation.Name,
+                Phone = reservation.Phone,
+                People = reservation.People,
+                ReservationTime = reservation.Time,
+                Status = reservation.Status,
+                CreatedAt = reservation.CreatedAt
+            };
+        }
+
+        public async Task<List<ReservationInfo>> GetReservationsAsync()
+        {
+            var reservations = await _context.Reservations
+                .Where(r => r.Status == "active")
+                .OrderBy(r => r.Time)
+                .ToListAsync();
+
+            return reservations.Select(r => new ReservationInfo
+            {
+                ReservationId = r.ReservationId,
+                Name = r.Name,
+                Phone = r.Phone,
+                People = r.People,
+                ReservationTime = r.Time,
+                Status = r.Status,
+                CreatedAt = r.CreatedAt
+            }).ToList();
+        }
+
+        public async Task<bool> CancelReservationAsync(int id)
+        {
+            var reservation = await _context.Reservations.FindAsync(id);
+            if (reservation == null) return false;
+
+            reservation.Status = "canceled";
+            await _context.SaveChangesAsync();
+            return true;
         }
     }
-
+}
